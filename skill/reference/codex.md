@@ -1,6 +1,6 @@
 # Codex: Visual Direction & Asset Production
 
-This file is loaded by `{{command_prefix}}impeccable craft` when the harness has native image generation (currently Codex via `image_gen`). Other harnesses skip it. It covers the two craft steps that depend on real image generation: landing the visual direction, and producing the raster assets the implementation will compose.
+This file is loaded by `{{command_prefix}}impeccable craft` when image generation is available: natively (currently Codex via `image_gen`) or through an `IMAGE_GEN_API_KEY` in `.impeccable/.env`. Other harnesses skip it. It covers the two craft steps that depend on real image generation: landing the visual direction, and producing the raster assets the implementation will compose.
 
 Read this *before* generating any images. The order matters, and the per-step user pauses are what keep generated imagery from drifting away from the brief.
 
@@ -46,7 +46,7 @@ Once the palette is confirmed, generate **1 to 3** high-fidelity north-star comp
 - Product work: push hierarchy, topology, density, tone, grounded in realistic product structure.
 - Landing pages and long-form brand surfaces: show enough of the second fold to establish the system beyond the hero.
 
-Use the `image_gen` tool directly (or via the imagegen skill when available). Don't ask the user to install anything.
+Use the `image_gen` tool directly (or via the imagegen skill when available); with a stored `IMAGE_GEN_API_KEY`, call that provider's API instead. Don't ask the user to install anything.
 
 ## Step D: Approval Loop
 
