@@ -29,6 +29,8 @@ Look at the working directory. Run `ls`. Check for:
 - An existing component library or design system: `src/components/`, `app/components/`, a `tokens.css` / `theme.ts`, an `astro.config` `integrations`. Read what's there before adding to it.
 - An existing icon set: `lucide-react`, `@phosphor-icons/react`, `@iconify/*`, hand-rolled SVG sprites in `assets/icons/`. **Use what's already in the project**; don't introduce a second set.
 
+**Remodel detection.** If the target of this craft invocation is an existing HTML page or server-rendered template, meaning a file path with a markup/template extension (`.html`, `.htm`, `.astro`, `.svelte`, `.vue`, `.njk`, `.liquid`, `.twig`, `.hbs`, `.erb`, `.php`, `.cshtml`, `.jsp`) or a route whose rendered markup is available, and the intent is to restyle, modernize, or reskin that page rather than build a new feature: this is a **remodel**, not a from-scratch craft. **Stop and load [remodel.md](remodel.md) now; it owns the rest of the flow.** Steps 1–6 below apply only where remodel.md references them. When in doubt: if the user named an existing page and asked you to improve how it looks, it is a remodel.
+
 If the directory is empty (greenfield), don't pick a framework silently. Ask the user via the AskUserQuestion tool, with sensible defaults framed by the brief:
 
 ```text
