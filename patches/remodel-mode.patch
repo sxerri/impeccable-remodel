@@ -1,153 +1,3 @@
-diff --git a/scripts/remodel-check.mjs b/scripts/remodel-check.mjs
-new file mode 100644
-index 00000000..813f0be0
---- /dev/null
-+++ b/scripts/remodel-check.mjs
-@@ -0,0 +1,144 @@
-+#!/usr/bin/env node
-+/**
-+ * remodel-check — deterministic invariant gate for remodel-mode output.
-+ *
-+ * Usage: node scripts/remodel-check.mjs <before.html> <after.html> [--json]
-+ *
-+ * Asserts that every integration hook present in the source document survives
-+ * in the remodeled document, and reports DOM churn. Exit 1 on any immutable
-+ * violation. Hook identity is matched as multisets (reordering-safe):
-+ *
-+ *   - element ids                (tag, id)
-+ *   - hook attributes: data-, aria-, role, name, for   (attrName, attrValue)
-+ *   - event-handler attributes   (attrName, attrValue)  e.g. onclick, x-on:
-+ *   - forms                      (action, method) and field names
-+ *   - scripts                    src values + inline content hashes
-+ *   - template markers           occurrence counts of {{, {%, <?php, <%=
-+ *
-+ * Churn = symmetric difference of element signature multisets
-+ * (tag + sorted classes + id), reported as added/removed/changed %.
-+ *
-+ * Uses htmlparser2 + domutils (repo dependencies); no new packages.
-+ */
-+import { readFileSync } from 'node:fs';
-+import { createHash } from 'node:crypto';
-+import { parseDocument } from 'htmlparser2';
-+import { findAll, textContent } from 'domutils';
-+
-+const [beforePath, afterPath, ...rest] = process.argv.slice(2);
-+const asJson = rest.includes('--json');
-+
-+if (!beforePath || !afterPath) {
-+  console.error('usage: node scripts/remodel-check.mjs <before.html> <after.html> [--json]');
-+  process.exit(2);
-+}
-+
-+const beforeHtml = readFileSync(beforePath, 'utf8');
-+const afterHtml = readFileSync(afterPath, 'utf8');
-+
-+function bump(map, key, n = 1) {
-+  map.set(key, (map.get(key) || 0) + n);
-+}
-+
-+/** Multiset subtraction: entries of a not covered by b. */
-+function deficit(a, b) {
-+  const out = [];
-+  const pool = new Map(b);
-+  for (const [key, count] of a) {
-+    const have = pool.get(key) || 0;
-+    const missing = count - Math.min(have, count);
-+    if (missing > 0) out.push([key, missing]);
-+    pool.set(key, have - Math.min(have, count));
-+  }
-+  return out;
-+}
-+
-+const HOOK_ATTR = /^(data-|aria-|on|@|x-on:|hx-|ng-|v-on:)/;
-+const NAMED_ATTRS = ['role', 'name', 'for'];
-+
-+function collect(html) {
-+  const doc = parseDocument(html);
-+  const elements = findAll(() => true, doc.children);
-+
-+  const ids = new Map();       // "tag#id"
-+  const attrs = new Map();     // "name=value"
-+  const forms = new Map();     // "action|method"
-+  const scripts = new Map();   // src or "inline:<hash>"
-+  const sigs = new Map();      // element signature multiset (tag + id + classes)
-+  const struts = new Map();    // structural signature multiset (tag + id only)
-+
-+  for (const el of elements) {
-+    const tag = el.name;
-+    const at = el.attribs || {};
-+    if (at.id) bump(ids, `${tag}#${at.id}`);
-+    for (const [name, value] of Object.entries(at)) {
-+      if (HOOK_ATTR.test(name) || NAMED_ATTRS.includes(name)) bump(attrs, `${name}=${value}`);
-+    }
-+    const classes = (at.class || '').split(/\s+/).filter(Boolean).sort().join('.');
-+    bump(sigs, `${tag}${at.id ? '#' + at.id : ''}${classes ? '.' + classes : ''}`);
-+    bump(struts, `${tag}${at.id ? '#' + at.id : ''}`);
-+  }
-+  for (const form of findAll((el) => el.name === 'form', doc.children)) {
-+    const at = form.attribs || {};
-+    bump(forms, `${at.action || ''}|${(at.method || 'get').toLowerCase()}`);
-+  }
-+  for (const s of findAll((el) => el.name === 'script', doc.children)) {
-+    const src = s.attribs?.src;
-+    bump(scripts, src || `inline:${createHash('sha1').update(textContent(s)).digest('hex').slice(0, 12)}`);
-+  }
-+
-+  const markers = new Map();
-+  for (const marker of ['{{', '{%', '<?php', '<%=']) {
-+    const count = html.split(marker).length - 1;
-+    if (count > 0) bump(markers, marker, count);
-+  }
-+  return { ids, attrs, forms, scripts, sigs, struts, markers };
-+}
-+
-+const before = collect(beforeHtml);
-+const after = collect(afterHtml);
-+
-+const violations = [];
-+for (const [label, missing] of [
-+  ['id', deficit(before.ids, after.ids)],
-+  ['attribute', deficit(before.attrs, after.attrs)],
-+  ['form', deficit(before.forms, after.forms)],
-+  ['script', deficit(before.scripts, after.scripts)],
-+  ['template-marker', deficit(before.markers, after.markers)],
-+]) {
-+  for (const [key, count] of missing) violations.push({ type: label, key, count });
-+}
-+
-+const removedEls = deficit(before.sigs, after.sigs).reduce((n, [, c]) => n + c, 0);
-+const addedEls = deficit(after.sigs, before.sigs).reduce((n, [, c]) => n + c, 0);
-+const removedStruct = deficit(before.struts, after.struts).reduce((n, [, c]) => n + c, 0);
-+const addedStruct = deficit(after.struts, before.struts).reduce((n, [, c]) => n + c, 0);
-+const totalBefore = [...before.sigs.values()].reduce((n, c) => n + c, 0);
-+const churnPct = totalBefore ? (((removedEls + addedEls) / (2 * totalBefore)) * 100).toFixed(1) : '0.0';
-+const structPct = totalBefore ? (((removedStruct + addedStruct) / (2 * totalBefore)) * 100).toFixed(1) : '0.0';
-+
-+const report = {
-+  ok: violations.length === 0,
-+  violations,
-+  churn: {
-+    // tag+id signature churn: elements actually added or removed
-+    structuralPct: Number(structPct), removedElements: removedStruct, addedElements: addedStruct,
-+    // tag+id+classes signature churn: includes class-only edits (remodel's main edit surface)
-+    signaturePct: Number(churnPct),
-+    sourceElements: totalBefore,
-+  },
-+};
-+
-+if (asJson) {
-+  console.log(JSON.stringify(report, null, 2));
-+} else {
-+  const summary = `structural churn ${structPct}% (+${addedStruct}/-${removedStruct}), signature churn ${churnPct}%, ${totalBefore} source elements`;
-+  if (report.ok) {
-+    console.log(`remodel-check OK: 0 immutable violations. ${summary}`);
-+  } else {
-+    console.error(`remodel-check FAILED: ${violations.length} immutable violation(s)`);
-+    for (const v of violations) console.error(`  ${v.type}: ${v.key} (missing x${v.count})`);
-+    console.error(summary);
-+  }
-+}
-+process.exit(report.ok ? 0 : 1);
 diff --git a/skill/reference/craft.md b/skill/reference/craft.md
 index 0604d0e0..5c778154 100644
 --- a/skill/reference/craft.md
@@ -163,10 +13,10 @@ index 0604d0e0..5c778154 100644
  ```text
 diff --git a/skill/reference/remodel.md b/skill/reference/remodel.md
 new file mode 100644
-index 00000000..08591693
+index 00000000..a30f45b5
 --- /dev/null
 +++ b/skill/reference/remodel.md
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,84 @@
 +# Remodel Flow
 +
 +Modernize an existing HTML implementation **in place**: new visual system, same document. The existing markup is the canonical document: its structure, semantics, content, and integration hooks are preserved by default, and the design system is applied through classes, CSS, and tokens rather than regeneration.
@@ -215,6 +65,15 @@ index 00000000..08591693
 +
 +**The single allowed exception path:** a structural change is permitted only when (a) it was named in the preflight plan with justification, and (b) the justification cites a concrete requirement: accessibility repair, a layout primitive that cannot be achieved otherwise, or an explicit user instruction. "Cleaner markup" is never a justification.
 +
++## Surface contract: evolved surface (conditional)
++
++Applies when the direction stamps `surfaceFidelity: "evolved"` (stardust: `DESIGN.json.extensions.surfaceFidelity`). In this mode the goal is to modernize within the site's existing design language, not to introduce a new one. These rules carry the same match-and-refuse standing as R2.
++
++- **Anchors come from the source.** Design anchors (hue families, type families, component vocabulary) are read from the extracted current design system (`stardust/current/DESIGN.md`, `_brand-extraction.json`, or the source document's own computed styles) plus the direction's modernization brief. Do not invent anchors.
++- **Every visual decision traces.** Each color, type, spacing, and component choice must cite either a source-system token or a specific brief item (type scale normalization, contrast repair, spacing rhythm, token hygiene, component consistency).
++- **New design language is a violation.** Introducing a hue family, type family, or component vocabulary absent from both the source system and the brief fails the same way a structural violation does: find a different edit.
++- **Modernization, not replacement.** The reviewer test: before/after screenshots should read as the same site's design, modernized. If the output reads as a different site wearing the same content, the surface contract failed regardless of structural cleanliness.
++
 +## Step R3: Apply the design system (the allowed edit surface)
 +
 +All visual change is delivered through these channels, in rough priority order:
@@ -232,6 +91,7 @@ index 00000000..08591693
 +
 +- **Invariant self-check (every pass, not just the last):** re-read the modified document against the source and enumerate: hooks removed or altered (expected: none), semantic tags changed or removed (expected: none), content changed (expected: none, unless requested), wrappers added (expected: exactly those in the plan). Report the count of each. If any expectation fails, fix before continuing; do not present a violation as a choice.
 +- **Churn metric:** state the diff size relative to the document (lines changed / total lines). There is no fixed threshold, but a remodel that rewrites most lines has failed its purpose.
++- **Surface traceability (evolved mode only):** list which source-system tokens and which brief items were applied. Any color, type, spacing, or component choice that traces to neither is a violation; fix before continuing.
 +- **Visual iteration** proceeds exactly as craft Step 5: screenshot at multiple viewports, critique against the direction contract and impeccable's DON'Ts, patch, re-inspect. Every iteration re-runs the invariant self-check above.
 +- Run the project's own checks when they exist (build, gates, detector). Detector findings are defect evidence only.
 +
