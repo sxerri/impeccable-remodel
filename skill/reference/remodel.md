@@ -46,6 +46,15 @@ These are match-and-refuse rules, same standing as impeccable's absolute bans. I
 
 **The single allowed exception path:** a structural change is permitted only when (a) it was named in the preflight plan with justification, and (b) the justification cites a concrete requirement: accessibility repair, a layout primitive that cannot be achieved otherwise, or an explicit user instruction. "Cleaner markup" is never a justification.
 
+## Surface contract: evolved surface (conditional)
+
+Applies when the direction stamps `surfaceFidelity: "evolved"` (stardust: `DESIGN.json.extensions.surfaceFidelity`). In this mode the goal is to modernize within the site's existing design language, not to introduce a new one. These rules carry the same match-and-refuse standing as R2.
+
+- **Anchors come from the source.** Design anchors (hue families, type families, component vocabulary) are read from the extracted current design system (`stardust/current/DESIGN.md`, `_brand-extraction.json`, or the source document's own computed styles) plus the direction's modernization brief. Do not invent anchors.
+- **Every visual decision traces.** Each color, type, spacing, and component choice must cite either a source-system token or a specific brief item (type scale normalization, contrast repair, spacing rhythm, token hygiene, component consistency).
+- **New design language is a violation.** Introducing a hue family, type family, or component vocabulary absent from both the source system and the brief fails the same way a structural violation does: find a different edit.
+- **Modernization, not replacement.** The reviewer test: before/after screenshots should read as the same site's design, modernized. If the output reads as a different site wearing the same content, the surface contract failed regardless of structural cleanliness.
+
 ## Step R3: Apply the design system (the allowed edit surface)
 
 All visual change is delivered through these channels, in rough priority order:
@@ -63,6 +72,7 @@ All visual change is delivered through these channels, in rough priority order:
 
 - **Invariant self-check (every pass, not just the last):** re-read the modified document against the source and enumerate: hooks removed or altered (expected: none), semantic tags changed or removed (expected: none), content changed (expected: none, unless requested), wrappers added (expected: exactly those in the plan). Report the count of each. If any expectation fails, fix before continuing; do not present a violation as a choice.
 - **Churn metric:** state the diff size relative to the document (lines changed / total lines). There is no fixed threshold, but a remodel that rewrites most lines has failed its purpose.
+- **Surface traceability (evolved mode only):** list which source-system tokens and which brief items were applied. Any color, type, spacing, or component choice that traces to neither is a violation; fix before continuing.
 - **Visual iteration** proceeds exactly as craft Step 5: screenshot at multiple viewports, critique against the direction contract and impeccable's DON'Ts, patch, re-inspect. Every iteration re-runs the invariant self-check above.
 - Run the project's own checks when they exist (build, gates, detector). Detector findings are defect evidence only.
 
