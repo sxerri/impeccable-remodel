@@ -11,6 +11,7 @@ Remodel is a mode of `craft`, entered when craft Step 0 detects that the target 
 - **Stardust projects:** the direction contract already exists. Treat `DESIGN.md`, `DESIGN.json`, `stardust/direction.md`, and canon (when present) as the confirmed design direction and `PRODUCT.md` as project context. Do not re-run discovery; do not divert into `init`.
 - **Non-stardust projects:** follow the normal setup preconditions (craft diverts to `init` when PRODUCT.md is missing). If no DESIGN.md exists, suggest `$impeccable document` to derive one from the codebase; the source page itself is the visual baseline until one exists.
 - The user's design objective for this task (restyle brief, anchor references, color strategy) is the task-specific contract, layered on top of project context.
+- **Style strategy:** `rebuild` (default) or `overlay` (experimental). Stardust stamps it in `DESIGN.json.extensions.styleStrategy`; otherwise resolve it in R0 from the brief: a low-impact re-theme within existing brand guidelines means overlay, anything else means rebuild. Overlay is valid only under the evolved surface contract (or an equivalent brand-guidelines brief): it re-themes within the existing brand, it never puts a new design language over old CSS.
 
 ## Step R0: Direction check (compact)
 
@@ -29,7 +30,7 @@ Do not write or modify a single line until this plan exists and has been shown t
      - CMS placeholders, template directives, and server-render markers (`{{ … }}`, `{% … %}`, `<?php … ?>`, `<%= … %>`, web components, custom elements)
      - landmark and heading structure (`header`, `nav`, `main`, `footer`, `article`, `section`, `aside`, `h1`–`h6`) as a *sequence*
    - **Visual-only** covers everything else: unclassed or purely presentational wrappers, decorative containers, spacing/type/color carriers with no hooks.
-   - **Style layer (strip, never preserved):** `<style>` elements and stylesheet `<link>` tags are not markup for preservation purposes. They are the old generated artifact; R3 step 1 removes all of them. Class-bearing elements stay (classes are markup); only the style-bearing constructs are stripped.
+   - **Style layer (strategy-dependent):** `<style>` elements and stylesheet `<link>` tags are not markup for preservation purposes. Under `rebuild` they are the old generated artifact; R3-A removes all of them. Under `overlay` they stay intact; change arrives via declared tweaks and one overlay block (R3-B). Class-bearing elements stay either way (classes are markup).
 3. **Emit the plan** as a compact checklist: region → classification → intended edit. Name every wrapper element you expect to add and why a layout primitive requires it. Name any semantic change you believe is required, with justification (see R2).
 4. **State the expected churn**: roughly how much of the document you intend to touch. If the honest answer is "most of the DOM", the approach is wrong; go back to classes-and-CSS.
 
@@ -44,7 +45,8 @@ These are match-and-refuse rules, same standing as impeccable's absolute bans. I
 - **Preserve forms completely.** Names, actions, methods, field order, validation attributes, and associated labels.
 - **Preserve templates.** Server-render markers and template directives are moved only with their parent element, never rewritten, re-encoded, or "cleaned up".
 - **Minimize DOM churn.** The diff is the deliverable's quality metric. A reviewer should be able to verify hook preservation by scanning it.
-- **No source CSS survives.** The output contains zero of the source document's `<style>` blocks and zero of its stylesheet `<link>` tags. Surviving source CSS is a failure on par with a removed hook. One carve-out: the rebuilt layer may re-declare font or icon stylesheet links the direction requires; those are new references, not preserved ones.
+- **Under `rebuild`: no source CSS survives.** The output contains zero of the source document's `<style>` blocks and zero of its stylesheet `<link>` tags. Surviving source CSS is a failure on par with a removed hook. One carve-out: the rebuilt layer may re-declare font or icon stylesheet links the direction requires; those are new references, not preserved ones.
+- **Under `overlay`: the source style layer stays intact.** Every existing rule survives unchanged except tweaks declared in the preflight plan (each tweak names selector, property, before/after value, and why). All other change goes through exactly one additive overlay block appended after the source styles.
 
 **The single allowed exception path:** a structural change is permitted only when (a) it was named in the preflight plan with justification, and (b) the justification cites a concrete requirement: accessibility repair, a layout primitive that cannot be achieved otherwise, or an explicit user instruction. "Cleaner markup" is never a justification.
 
@@ -57,9 +59,16 @@ Applies when the direction stamps `surfaceFidelity: "evolved"` (stardust: `DESIG
 - **New design language is a violation.** Introducing a hue family, type family, or component vocabulary absent from both the source system and the brief fails the same way a structural violation does: find a different edit.
 - **Modernization, not replacement.** The reviewer test: before/after screenshots should read as the same site's design, modernized. If the output reads as a different site wearing the same content, the surface contract failed regardless of structural cleanliness.
 
-## Step R3: Rebuild the style layer (the allowed edit surface)
+## Step R3: Apply the style strategy (the allowed edit surface)
 
-The markup is the immutable artifact; the stylesheet is the generated artifact. All visual change is delivered by rebuilding the style layer from the ground up for the preserved document, never by overlaying new CSS on the source's own styles. Overlaying produces two-cascade warfare: specificity fights, half-migrated components, unreviewable output.
+The markup is the immutable artifact; the stylesheet is the generated artifact. Two strategies, stamped by the brief (default `rebuild`):
+
+- **R3-A rebuild** (main path): strip the old style layer, author one coherent stylesheet from the ground up.
+- **R3-B overlay** (experimental, low-impact re-theme): keep the old style layer, deliver declared tweaks plus one additive overlay block.
+
+### R3-A: Rebuild the style layer
+
+All visual change is delivered by rebuilding the style layer from the ground up for the preserved document, never by overlaying new CSS on the source's own styles. Unbounded overlaying produces two-cascade warfare: specificity fights, half-migrated components, unreviewable output.
 
 1. **Strip the source style layer.** Remove the document's own `<style>` blocks and stylesheet `<link>` tags from the working copy. When the handoff already stripped them (stardust prototype flow strips at copy time), verify zero remnants instead. Inline `style=` attributes stay: they may carry JS-managed state, and runtime code re-owns them. Record every stripped block and link in the preflight plan (R1) before removing anything.
 2. **Inventory the selectors.** Read the preserved DOM and enumerate what needs styling: every landmark, component, and class in the captured markup. The rebuilt stylesheet must cover the full inventory. Elements previously styled only by external stylesheets are the known naked-region risk; name them in the plan.
@@ -67,14 +76,23 @@ The markup is the immutable artifact; the stylesheet is the generated artifact. 
 4. **Class attributes.** Add classes to existing elements only where the rebuilt stylesheet needs a selector it cannot get from structure alone. Additive by default; never remove classes that carry hooks or template logic.
 5. **Wrapper elements.** A new `<div>`/`<span>` wrapper is allowed only where a layout primitive (grid track, flex cluster, aspect box, container-query context) genuinely requires it. Each wrapper was justified in the preflight plan. Wrappers never carry content, hooks, or semantics of their own.
 
+### R3-B: Overlay (experimental)
+
+All visual change is delivered inside the existing cascade, within the current brand. This path exists for low-impact re-themes where the source CSS is an asset, not a liability. It demands more restraint than rebuild, not less: the failure mode is unbounded drift into two-cascade warfare.
+
+1. **Preserve the source style layer.** No strip. Do not modify `<style>` elements or stylesheet `<link>` tags except for declared tweaks (next step).
+2. **Declare every direct tweak in the preflight plan.** A tweak is a surgical edit to an existing rule: selector, property, before value, after value, reason. Token-level only (color, type size, spacing, radius); never restructures. Budget: roughly 20 declarations or fewer. If the honest plan exceeds that, you wanted rebuild; say so.
+3. **Author exactly one overlay block.** One `<style>` block appended after the source styles: custom properties and targeted overrides only. No new component vocabulary, no layout restructure, no new design language. Everything the tweaks cannot express lives here.
+4. **Classes and wrappers** follow the same rules as R3-A: classes additive only; wrappers only for genuine layout primitives, justified in the plan.
+
 **Edit incrementally.** Make a series of small, reviewable edits to the existing markup. Do not regenerate the document markup, rewrite it wholesale, or "round-trip" it through your own formatting. The style layer is the one exception: it is rebuilt wholesale by design. Match the source file's existing formatting conventions (indentation, quoting, attribute order) so the markup diff stays semantic.
 
 **Respect the pipeline.** If the page is server-rendered or built (Rails, Next, Astro, AEM, static generators), edit the *source template*, not the rendered output, and run the project's own build/dev verification. The production bar from craft Step 4 applies in full (real states, responsive behavior, contrast, motion rules); it is simply delivered through the allowed edit surface.
 
 ## Step R4: Verify
 
-- **Invariant self-check (every pass, not just the last):** re-read the modified document against the source and enumerate: hooks removed or altered (expected: none), semantic tags changed or removed (expected: none), content changed (expected: none, unless requested), wrappers added (expected: exactly those in the plan), source style blocks surviving (expected: 0), source stylesheet links surviving (expected: 0). Report the count of each. If any expectation fails, fix before continuing; do not present a violation as a choice.
-- **Churn metric:** state the markup diff size relative to the document (lines changed / total lines). There is no fixed threshold, but a remodel that rewrites most markup lines has failed its purpose. The style layer is exempt from churn accounting: it is a rebuild by design, and its quality metric is selector-inventory coverage and coherence, not diff size.
+- **Invariant self-check (every pass, not just the last):** re-read the modified document against the source and enumerate: hooks removed or altered (expected: none), semantic tags changed or removed (expected: none), content changed (expected: none, unless requested), wrappers added (expected: exactly those in the plan), source style blocks surviving (expected: 0 under `rebuild`; source count under `overlay`), source stylesheet links surviving (expected: 0 under `rebuild`; source count under `overlay`), overlay blocks added (expected: 0 under `rebuild`; exactly 1 under `overlay`), direct tweaks (expected: exactly the declared list under `overlay`). Report the count of each. If any expectation fails, fix before continuing; do not present a violation as a choice.
+- **Churn metric:** state the markup diff size relative to the document (lines changed / total lines). There is no fixed threshold, but a remodel that rewrites most markup lines has failed its purpose. The style layer is exempt from churn accounting: under `rebuild` its metrics are inventory coverage and coherence; under `overlay` its metric is restraint (tweaks within budget, one overlay block).
 - **Surface traceability (evolved mode only):** list which source-system tokens and which brief items were applied. Any color, type, spacing, or component choice that traces to neither is a violation; fix before continuing.
 - **Same-site test (visual iteration anchor):** when original screenshots or the live URL are available (stardust: `stardust/current/assets/screenshots/`), iterate against them side by side. Under the evolved surface contract the output must read as the same site's design, modernized; under a reimagined direction it must read as the direction applied to the same document.
 - **Visual iteration** proceeds exactly as craft Step 5: screenshot at multiple viewports, critique against the direction contract and impeccable's DON'Ts, patch, re-inspect. Every iteration re-runs the invariant self-check above.
