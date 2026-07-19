@@ -21,7 +21,7 @@ Remodel needs a confirmed visual direction before the preflight plan, but never 
 Do not write or modify a single line until this plan exists and has been shown to the user (or, in non-interactive operation with an already-confirmed direction, recorded in the conversation).
 
 1. **Read the entire source document.** All of it, including `<head>`, inline scripts, and template syntax. Partial reads produce partial plans.
-2. **Classify every region** into exactly one of two sets:
+2. **Classify every region** into exactly one of three sets:
    - **Immutable**: anything with integration or identity weight:
      - elements bearing `id`, `data-*`, `aria-*`, `role`, `name`, `for`, or event-handler attributes (`onclick`, `@click`, `x-on:*`, `hx-*`, `ng-*`, `v-on:*`, etc.)
      - `<form>` elements, their controls, and their action/method wiring
@@ -29,6 +29,7 @@ Do not write or modify a single line until this plan exists and has been shown t
      - CMS placeholders, template directives, and server-render markers (`{{ … }}`, `{% … %}`, `<?php … ?>`, `<%= … %>`, web components, custom elements)
      - landmark and heading structure (`header`, `nav`, `main`, `footer`, `article`, `section`, `aside`, `h1`–`h6`) as a *sequence*
    - **Visual-only** covers everything else: unclassed or purely presentational wrappers, decorative containers, spacing/type/color carriers with no hooks.
+   - **Style layer (strip, never preserved):** `<style>` elements and stylesheet `<link>` tags are not markup for preservation purposes. They are the old generated artifact; R3 step 1 removes all of them. Class-bearing elements stay (classes are markup); only the style-bearing constructs are stripped.
 3. **Emit the plan** as a compact checklist: region → classification → intended edit. Name every wrapper element you expect to add and why a layout primitive requires it. Name any semantic change you believe is required, with justification (see R2).
 4. **State the expected churn**: roughly how much of the document you intend to touch. If the honest answer is "most of the DOM", the approach is wrong; go back to classes-and-CSS.
 
@@ -43,6 +44,7 @@ These are match-and-refuse rules, same standing as impeccable's absolute bans. I
 - **Preserve forms completely.** Names, actions, methods, field order, validation attributes, and associated labels.
 - **Preserve templates.** Server-render markers and template directives are moved only with their parent element, never rewritten, re-encoded, or "cleaned up".
 - **Minimize DOM churn.** The diff is the deliverable's quality metric. A reviewer should be able to verify hook preservation by scanning it.
+- **No source CSS survives.** The output contains zero of the source document's `<style>` blocks and zero of its stylesheet `<link>` tags. Surviving source CSS is a failure on par with a removed hook. One carve-out: the rebuilt layer may re-declare font or icon stylesheet links the direction requires; those are new references, not preserved ones.
 
 **The single allowed exception path:** a structural change is permitted only when (a) it was named in the preflight plan with justification, and (b) the justification cites a concrete requirement: accessibility repair, a layout primitive that cannot be achieved otherwise, or an explicit user instruction. "Cleaner markup" is never a justification.
 
@@ -59,7 +61,7 @@ Applies when the direction stamps `surfaceFidelity: "evolved"` (stardust: `DESIG
 
 The markup is the immutable artifact; the stylesheet is the generated artifact. All visual change is delivered by rebuilding the style layer from the ground up for the preserved document, never by overlaying new CSS on the source's own styles. Overlaying produces two-cascade warfare: specificity fights, half-migrated components, unreviewable output.
 
-1. **Strip the source style layer.** Remove the document's own `<style>` blocks and stylesheet `<link>` tags from the working copy. Inline `style=` attributes stay: they may carry JS-managed state, and runtime code re-owns them. Record every stripped block and link in the preflight plan (R1) before removing anything.
+1. **Strip the source style layer.** Remove the document's own `<style>` blocks and stylesheet `<link>` tags from the working copy. When the handoff already stripped them (stardust prototype flow strips at copy time), verify zero remnants instead. Inline `style=` attributes stay: they may carry JS-managed state, and runtime code re-owns them. Record every stripped block and link in the preflight plan (R1) before removing anything.
 2. **Inventory the selectors.** Read the preserved DOM and enumerate what needs styling: every landmark, component, and class in the captured markup. The rebuilt stylesheet must cover the full inventory. Elements previously styled only by external stylesheets are the known naked-region risk; name them in the plan.
 3. **Author one coherent stylesheet.** A single style layer (one `<style>` block or one linked file), built on CSS custom properties, written fresh for this document. Never edit the source's old rules, never import them. Follow the General rules and the loaded register reference exactly as in a from-scratch build; the design bar does not drop because the DOM is preserved. The rebuild owns every breakpoint and state the page ships.
 4. **Class attributes.** Add classes to existing elements only where the rebuilt stylesheet needs a selector it cannot get from structure alone. Additive by default; never remove classes that carry hooks or template logic.
@@ -71,7 +73,7 @@ The markup is the immutable artifact; the stylesheet is the generated artifact. 
 
 ## Step R4: Verify
 
-- **Invariant self-check (every pass, not just the last):** re-read the modified document against the source and enumerate: hooks removed or altered (expected: none), semantic tags changed or removed (expected: none), content changed (expected: none, unless requested), wrappers added (expected: exactly those in the plan). Report the count of each. If any expectation fails, fix before continuing; do not present a violation as a choice.
+- **Invariant self-check (every pass, not just the last):** re-read the modified document against the source and enumerate: hooks removed or altered (expected: none), semantic tags changed or removed (expected: none), content changed (expected: none, unless requested), wrappers added (expected: exactly those in the plan), source style blocks surviving (expected: 0), source stylesheet links surviving (expected: 0). Report the count of each. If any expectation fails, fix before continuing; do not present a violation as a choice.
 - **Churn metric:** state the markup diff size relative to the document (lines changed / total lines). There is no fixed threshold, but a remodel that rewrites most markup lines has failed its purpose. The style layer is exempt from churn accounting: it is a rebuild by design, and its quality metric is selector-inventory coverage and coherence, not diff size.
 - **Surface traceability (evolved mode only):** list which source-system tokens and which brief items were applied. Any color, type, spacing, or component choice that traces to neither is a violation; fix before continuing.
 - **Same-site test (visual iteration anchor):** when original screenshots or the live URL are available (stardust: `stardust/current/assets/screenshots/`), iterate against them side by side. Under the evolved surface contract the output must read as the same site's design, modernized; under a reimagined direction it must read as the direction applied to the same document.
