@@ -1,10 +1,10 @@
 # Remodel Flow
 
-Modernize an existing HTML implementation **in place**: new visual system, same document. The existing markup is the canonical document: its structure, semantics, content, and integration hooks are preserved by default, and the design system is applied through classes, CSS, and tokens rather than regeneration.
+Modernize an existing HTML implementation **in place**: new visual system, same document. The existing markup is the canonical document: its structure, semantics, content, and integration hooks are preserved by default, and the design system is delivered as a rebuilt style layer rather than markup regeneration.
 
 Remodel is a mode of `craft`, entered when craft Step 0 detects that the target is an existing HTML/template page and the intent is to restyle it. Once this file is loaded, it owns the rest of the flow. The craft steps apply only where this file says so.
 
-**Target behavior:** given existing HTML + a design objective, produce a stylistic redesign implementation while preserving existing functionality, structure, and integrations. The output must be a clean, minimal, reviewable diff: easy to migrate, easy to reconcile against server-rendered templates.
+**Target behavior:** given existing HTML + a design objective, produce a stylistic redesign implementation while preserving existing functionality, structure, and integrations. The output must preserve a clean, minimal, reviewable markup diff (easy to migrate, easy to reconcile against server-rendered templates) with a style layer owned end to end by the rebuild.
 
 ## Context rules
 
@@ -50,29 +50,31 @@ These are match-and-refuse rules, same standing as impeccable's absolute bans. I
 
 Applies when the direction stamps `surfaceFidelity: "evolved"` (stardust: `DESIGN.json.extensions.surfaceFidelity`). In this mode the goal is to modernize within the site's existing design language, not to introduce a new one. These rules carry the same match-and-refuse standing as R2.
 
-- **Anchors come from the source.** Design anchors (hue families, type families, component vocabulary) are read from the extracted current design system (`stardust/current/DESIGN.md`, `_brand-extraction.json`, or the source document's own computed styles) plus the direction's modernization brief. Do not invent anchors.
+- **Anchors come from the source.** Design anchors (hue families, type families, component vocabulary) are read from the extracted current design system (`stardust/current/DESIGN.md`, `_brand-extraction.json`, the document's computed styles at capture time, and original page screenshots when available under `stardust/current/assets/screenshots/`) plus the direction's modernization brief. Do not invent anchors.
 - **Every visual decision traces.** Each color, type, spacing, and component choice must cite either a source-system token or a specific brief item (type scale normalization, contrast repair, spacing rhythm, token hygiene, component consistency).
 - **New design language is a violation.** Introducing a hue family, type family, or component vocabulary absent from both the source system and the brief fails the same way a structural violation does: find a different edit.
 - **Modernization, not replacement.** The reviewer test: before/after screenshots should read as the same site's design, modernized. If the output reads as a different site wearing the same content, the surface contract failed regardless of structural cleanliness.
 
-## Step R3: Apply the design system (the allowed edit surface)
+## Step R3: Rebuild the style layer (the allowed edit surface)
 
-All visual change is delivered through these channels, in rough priority order:
+The markup is the immutable artifact; the stylesheet is the generated artifact. All visual change is delivered by rebuilding the style layer from the ground up for the preserved document, never by overlaying new CSS on the source's own styles. Overlaying produces two-cascade warfare: specificity fights, half-migrated components, unreviewable output.
 
-1. **CSS and tokens.** New stylesheet, CSS custom properties, cascade layers. The strongest remodels change no markup at all.
-2. **Class attributes.** Add classes to existing elements. Never remove existing classes that carry hooks or template logic; additive by default.
-3. **Typography, spacing, layout** via the above. Follow the General rules and the loaded register reference exactly as in a from-scratch build; the design bar does not drop because the DOM is preserved.
-4. **Wrapper elements.** A new `<div>`/`<span>` wrapper is allowed only where a layout primitive (grid track, flex cluster, aspect box, container-query context) genuinely requires it. Each wrapper was justified in the preflight plan. Wrappers never carry content, hooks, or semantics of their own.
+1. **Strip the source style layer.** Remove the document's own `<style>` blocks and stylesheet `<link>` tags from the working copy. Inline `style=` attributes stay: they may carry JS-managed state, and runtime code re-owns them. Record every stripped block and link in the preflight plan (R1) before removing anything.
+2. **Inventory the selectors.** Read the preserved DOM and enumerate what needs styling: every landmark, component, and class in the captured markup. The rebuilt stylesheet must cover the full inventory. Elements previously styled only by external stylesheets are the known naked-region risk; name them in the plan.
+3. **Author one coherent stylesheet.** A single style layer (one `<style>` block or one linked file), built on CSS custom properties, written fresh for this document. Never edit the source's old rules, never import them. Follow the General rules and the loaded register reference exactly as in a from-scratch build; the design bar does not drop because the DOM is preserved. The rebuild owns every breakpoint and state the page ships.
+4. **Class attributes.** Add classes to existing elements only where the rebuilt stylesheet needs a selector it cannot get from structure alone. Additive by default; never remove classes that carry hooks or template logic.
+5. **Wrapper elements.** A new `<div>`/`<span>` wrapper is allowed only where a layout primitive (grid track, flex cluster, aspect box, container-query context) genuinely requires it. Each wrapper was justified in the preflight plan. Wrappers never carry content, hooks, or semantics of their own.
 
-**Edit incrementally.** Make a series of small, reviewable edits to the existing file(s). Do not regenerate the document, rewrite the file wholesale, or "round-trip" it through your own formatting. Match the source file's existing formatting conventions (indentation, quoting, attribute order) so the diff stays semantic.
+**Edit incrementally.** Make a series of small, reviewable edits to the existing markup. Do not regenerate the document markup, rewrite it wholesale, or "round-trip" it through your own formatting. The style layer is the one exception: it is rebuilt wholesale by design. Match the source file's existing formatting conventions (indentation, quoting, attribute order) so the markup diff stays semantic.
 
 **Respect the pipeline.** If the page is server-rendered or built (Rails, Next, Astro, AEM, static generators), edit the *source template*, not the rendered output, and run the project's own build/dev verification. The production bar from craft Step 4 applies in full (real states, responsive behavior, contrast, motion rules); it is simply delivered through the allowed edit surface.
 
 ## Step R4: Verify
 
 - **Invariant self-check (every pass, not just the last):** re-read the modified document against the source and enumerate: hooks removed or altered (expected: none), semantic tags changed or removed (expected: none), content changed (expected: none, unless requested), wrappers added (expected: exactly those in the plan). Report the count of each. If any expectation fails, fix before continuing; do not present a violation as a choice.
-- **Churn metric:** state the diff size relative to the document (lines changed / total lines). There is no fixed threshold, but a remodel that rewrites most lines has failed its purpose.
+- **Churn metric:** state the markup diff size relative to the document (lines changed / total lines). There is no fixed threshold, but a remodel that rewrites most markup lines has failed its purpose. The style layer is exempt from churn accounting: it is a rebuild by design, and its quality metric is selector-inventory coverage and coherence, not diff size.
 - **Surface traceability (evolved mode only):** list which source-system tokens and which brief items were applied. Any color, type, spacing, or component choice that traces to neither is a violation; fix before continuing.
+- **Same-site test (visual iteration anchor):** when original screenshots or the live URL are available (stardust: `stardust/current/assets/screenshots/`), iterate against them side by side. Under the evolved surface contract the output must read as the same site's design, modernized; under a reimagined direction it must read as the direction applied to the same document.
 - **Visual iteration** proceeds exactly as craft Step 5: screenshot at multiple viewports, critique against the direction contract and impeccable's DON'Ts, patch, re-inspect. Every iteration re-runs the invariant self-check above.
 - Run the project's own checks when they exist (build, gates, detector). Detector findings are defect evidence only.
 
